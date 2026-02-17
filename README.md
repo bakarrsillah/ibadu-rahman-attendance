@@ -29,4 +29,4 @@ A full-stack web app for managing student attendance in Ibadu Rahman Mosque. Tea
 5. Run Streamlit: `streamlit run app.py`
 
 ## Live Demo
-[Click here to view deployed app]((https://ibadu-rahman-attendance-1.onrender.com/))
+[Click here to view deployed app](https://ibadu-rahman-attendance-1.onrender.com/)
