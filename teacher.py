@@ -3,102 +3,78 @@ from db import get_connection
 from datetime import date
 
 def teacher_panel():
-
-    st.title("Teacher Roll Call")
-
-    user_id = st.session_state.user_id
-
-    # ---- Date & Session Selection ----
-    col1, col2 = st.columns(2)
-
-    with col1:
-        selected_date = st.date_input("Select Date", date.today())
-
-    with col2:
-        selected_session = st.selectbox(
-            "Select Session",
-            ["Morning", "Afternoon", "Evening"]
-        )
-
-    # ---- Fetch Only Assigned Students ----
+    st.title("📋 Teacher Roll Call")
+    
+    selected_date = st.date_input("Select Date", date.today())
+    
     conn = get_connection()
     cur = conn.cursor()
-
+    
+    # Get teacher's assigned levels
     cur.execute("""
-        SELECT s.id, s.full_name
-        FROM students s
-        JOIN levels l ON s.level_id = l.id
-        JOIN teacher_levels tl ON tl.level_id = l.id
-        WHERE tl.teacher_id = %s
-        ORDER BY s.full_name
-    """, (user_id,))
-
-    students = cur.fetchall()
+        SELECT level_id
+        FROM teacher_levels
+        WHERE teacher_id = %s
+    """, (st.session_state.user_id,))
+    levels = [row[0] for row in cur.fetchall()]
+    
+    # Get students in those levels
+    if levels:
+        cur.execute(f"""
+            SELECT id, full_name
+            FROM students
+            WHERE level_id = ANY(%s)
+            ORDER BY full_name
+        """, (levels,))
+        students = cur.fetchall()
+    else:
+        students = []
+    
     cur.close()
     conn.close()
-
-    if not students:
-        st.warning("No students assigned to you.")
-        return
-
-    st.subheader("Mark Attendance")
-
-    # ---- Mark All Present Button ----
+    
+    st.write(f"Total students: {len(students)}")
+    
+    # Initialize attendance in session_state
+    if "attendance" not in st.session_state:
+        st.session_state.attendance = {student[0]: False for student in students}  # False = Absent
+    
+    # Layout buttons in columns (3 per row)
+    cols_per_row = 3
+    for i in range(0, len(students), cols_per_row):
+        cols = st.columns(cols_per_row)
+        for j, student in enumerate(students[i:i+cols_per_row]):
+            student_id, name = student
+            present = st.session_state.attendance[student_id]
+            
+            # Button label and color
+            label = name
+            button_color = "✅ " if present else "⬜ "
+            
+            # Button to toggle
+            if cols[j].button(f"{button_color}{label}", key=f"att_{student_id}"):
+                st.session_state.attendance[student_id] = not st.session_state.attendance[student_id]
+    
+    # "Mark All Present" button
     if st.button("Mark All Present"):
-        for student_id, _ in students:
-            st.session_state[f"student_{student_id}"] = True
-        st.rerun()
-
-    attendance_data = {}
-
-    present_count = 0
-
-    # ---- Student Checkbox List ----
-    for student_id, name in students:
-
-        checked = st.checkbox(
-            name,
-            key=f"student_{student_id}"
-        )
-
-        attendance_data[student_id] = checked
-
-        if checked:
-            present_count += 1
-
-    total_students = len(students)
-
-    st.info(f"Present: {present_count} / {total_students}")
-
-    # ---- Save Attendance ----
-    if st.button("Save Attendance"):
-
+        for student_id in st.session_state.attendance.keys():
+            st.session_state.attendance[student_id] = True
+    
+    # Submit attendance
+    if st.button("Submit Attendance"):
         conn = get_connection()
         cur = conn.cursor()
-
-        for student_id, present in attendance_data.items():
-
+        
+        for student_id, present in st.session_state.attendance.items():
             status = "Present" if present else "Absent"
-
             cur.execute("""
-                INSERT INTO attendance 
-                (student_id, class_date, session, status, marked_by)
+                INSERT INTO attendance (student_id, class_date, session, status, marked_by)
                 VALUES (%s, %s, %s, %s, %s)
                 ON CONFLICT (student_id, class_date, session)
-                DO UPDATE SET 
-                    status = EXCLUDED.status,
-                    marked_by = EXCLUDED.marked_by,
-                    updated_at = CURRENT_TIMESTAMP
-            """, (
-                student_id,
-                selected_date,
-                selected_session,
-                status,
-                user_id
-            ))
-
+                DO UPDATE SET status = EXCLUDED.status, updated_at = CURRENT_TIMESTAMP, updated_by = EXCLUDED.marked_by
+            """, (student_id, selected_date, 'Morning', status, st.session_state.user_id))
+        
         conn.commit()
         cur.close()
         conn.close()
-
-        st.success("Attendance saved successfully!")
+        st.success("Attendance submitted successfully!")
