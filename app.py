@@ -5,7 +5,7 @@ from teacher import teacher_panel
 from stakeholder import stakeholder_panel
 from dashboard import attendance_dashboard
 
-st.set_page_config(page_title="Masjid Attendance System")
+st.set_page_config(page_title="Ibadu Rahman Masjid Attendance System")
 
 # ---------------- SESSION INIT ----------------
 if "logged_in" not in st.session_state:
