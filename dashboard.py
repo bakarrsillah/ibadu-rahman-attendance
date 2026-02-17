@@ -8,20 +8,42 @@ def attendance_dashboard():
 
     conn = get_connection()
 
-    # Corrected query with class_date and session
-    query = """
-        SELECT 
-            s.full_name,
-            l.level_name,
-            a.class_date,
-            a.session,
-            a.status
-        FROM attendance a
-        JOIN students s ON a.student_id = s.id
-        JOIN levels l ON s.level_id = l.id
-    """
+    # Determine user role and ID
+    user_role = st.session_state.role
+    user_id = st.session_state.user_id
 
-    df = pd.read_sql(query, conn)
+    # --- Role-based query ---
+    if user_role == "teacher":
+        # Only students assigned to this teacher
+        query = """
+            SELECT 
+                s.full_name,
+                l.level_name,
+                a.class_date,
+                a.session,
+                a.status
+            FROM attendance a
+            JOIN students s ON a.student_id = s.id
+            JOIN levels l ON s.level_id = l.id
+            JOIN teacher_levels tl ON tl.level_id = l.id
+            WHERE tl.teacher_id = %s
+        """
+        df = pd.read_sql(query, conn, params=(user_id,))
+    else:
+        # Admin/Stakeholder see all
+        query = """
+            SELECT 
+                s.full_name,
+                l.level_name,
+                a.class_date,
+                a.session,
+                a.status
+            FROM attendance a
+            JOIN students s ON a.student_id = s.id
+            JOIN levels l ON s.level_id = l.id
+        """
+        df = pd.read_sql(query, conn)
+
     conn.close()
 
     if df.empty:
